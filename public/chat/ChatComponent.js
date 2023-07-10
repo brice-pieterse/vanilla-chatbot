@@ -1,7 +1,20 @@
 import { Messages } from "/chat/Messages.js"
 
+
+function easeOutBack(x) {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+}
+
+function easeOutQuint(x) {
+    return 1 - Math.pow(1 - x, 5);
+}
+
 // markup for rendering the chat component
-export default function ChatComponent(config, state){
+export default function ChatComponent(config, state, prevState, updater){
+    const container = document.createElement('div')
+    let cleanups = []
 
     let styles = {
         position: 'absolute',
@@ -13,27 +26,34 @@ export default function ChatComponent(config, state){
         justifyContent: 'center',
         alignItems: 'flex-end'
     }
-
-    const container = document.createElement('div')
     
     Object.keys(styles).forEach(k => {
         container.style[k] = styles[k]
     })
 
     if (state.opened){
-        container.appendChild(ChatWindow(config, state))
-        container.appendChild(Face(config))
-        container.appendChild(Opener(config, state))
+        console.log("open")
+        let chatWindow = ChatWindow(config, state, prevState, updater)
+        cleanups.push(chatWindow.cleanup)
+        container.appendChild(chatWindow.component)
+        container.appendChild(Face(config, state, prevState))
+        container.appendChild(Opener(config, state, updater))
     } else {
-        container.appendChild(Opener(config, state))
+        console.log("closed")
+        container.appendChild(Opener(config, state, updater))
     }
 
-    return container
+    return {component: container, cleanup: () => {
+        for (let cleanup of cleanups){
+            cleanup()
+        }
+    }}
 }
 
 
-const ChatWindow = (config, state) => {
+const ChatWindow = (config, state, prevState, updater) => {
     let chatWindow = document.createElement('div')
+    let cleanups = []
 
     let styles = {
         width: '100%',
@@ -53,7 +73,75 @@ const ChatWindow = (config, state) => {
         border: '0.5px solid rgba(201, 217, 232, 0.25)',
         backgroundColor: '#F1F5F9',
         boxShadow: '8px 8px 16px #C9D9E8, -6px -6px 10px #FFFFFF',
-        borderRadius: '20px'
+        borderRadius: '20px',
+        opacity: !prevState.opened ? 0 : 1,
+        transform: !prevState.opened ? 'scale(0)': 'scale(1)',
+        transformOrigin: 'bottom right'
+    }
+
+
+
+    // trigger open window animation
+    if (!prevState.opened && state.opened){
+        setTimeout(() => {
+            let opacity = 0
+            let scale = 0
+            let o = 0
+            let s = 0
+
+
+            let popOpen = () => {
+                scale = easeOutBack(s)
+                opacity = easeOutBack(o)
+                s += 0.01
+                o += 0.01
+
+                chatWindow.style.opacity = opacity
+                chatWindow.style.transform = `scale(${scale})`
+
+                if(s < 1 || o < 1){
+                    requestAnimationFrame(popOpen)
+                }
+            }
+
+            popOpen()
+
+        }, [100])
+    } 
+
+    // close window animation
+    if(state.opened){
+        let opacity = 0
+        let scale = 0
+        let o = 0
+        let s = 0
+
+        let popClosed = () => {
+            scale = 1 - easeOutQuint(s)
+            opacity = 1 - easeOutQuint(o)
+            s += 0.01
+            o += 0.01
+
+            chatWindow.style.opacity = opacity
+            chatWindow.style.transform = `scale(${scale})`
+            
+
+            if(s < 1 || o < 1){
+                requestAnimationFrame(popClosed)
+            } else {
+                window.removeEventListener('closeChat', popClosed)
+                // console.log("updater fired")
+                updater((state) => {
+                    return {
+                        ...state,
+                        messages: [...state.messages],
+                        opened: !state.opened
+                    }
+                })
+            }
+        }
+
+        window.addEventListener('closeChat', popClosed)
     }
 
     Object.keys(styles).forEach(k => {
@@ -61,10 +149,16 @@ const ChatWindow = (config, state) => {
     })
 
     chatWindow.appendChild(Header(config))
-    chatWindow.appendChild(Messages(state))
-    chatWindow.appendChild(Form(config))
+    let messages = Messages(state, prevState)
+    cleanups.push(messages.cleanup)
+    chatWindow.appendChild(messages.component)
+    chatWindow.appendChild(Form(config, updater))
     
-    return chatWindow
+    return {component: chatWindow, cleanup : () => {
+        for (let cleanup of cleanups){
+            cleanup()
+        }
+    }}
 }
 
 
@@ -74,6 +168,7 @@ const Header = (config) => {
         position: 'relative',
         width: '100%',
         flexGrow: 0.08,
+        minHeight: '8%',
         textAlign: 'center',
         display: 'flex',
         justifyContent: 'flex-start',
@@ -113,7 +208,7 @@ const Header = (config) => {
 }
 
 
-const Opener = (config, state) => {
+const Opener = (config, state, updater) => {
 
     let close = document.createElement('button')
 
@@ -149,6 +244,26 @@ const Opener = (config, state) => {
         close.innerText = 'Chat'
         
     }
+
+
+    let toggle = () => {
+        close.removeEventListener('click', toggle)
+        console.log("TOGGLE STATE", state)
+        if(state.opened){
+            // updater fires in chatWindow after animate out
+            window.dispatchEvent(new CustomEvent("closeChat"))
+        } else {
+            updater((state) => {
+                return {
+                    ...state,
+                    messages: [...state.messages],
+                    opened: !state.opened
+                }
+            })
+        }
+    }
+
+    close.addEventListener('click', toggle)
     
 
     Object.keys(styles).forEach(k => {
@@ -159,7 +274,7 @@ const Opener = (config, state) => {
 }
 
 
-const Face = (config) => {
+const Face = (config, state, prevState) => {
     let face = document.createElement('div')
     let image = document.createElement('img')
     image.style.position = "absolute";
@@ -180,7 +295,10 @@ const Face = (config) => {
         borderRadius: '50%',
         top: '24px',
         right: '20px',
-        zIndex: 2
+        zIndex: 2,
+        opacity: !prevState.opened ? 0 : 1,
+        transform: !prevState.opened ? 'scale(0)': 'scale(1)',
+        transformOrigin: 'bottom right'
     }
 
     Object.keys(styles).forEach(k => {
@@ -189,11 +307,67 @@ const Face = (config) => {
 
     image.src = config.avatar
 
+
+    // trigger open window animation
+    if (!prevState.opened && state.opened){
+        setTimeout(() => {
+            let opacity = 0
+            let scale = 0
+            let o = 0
+            let s = 0
+
+
+            let popOpen = () => {
+                scale = easeOutBack(s)
+                opacity = easeOutBack(o)
+                s += 0.01
+                o += 0.01
+
+                face.style.opacity = opacity
+                face.style.transform = `scale(${scale})`
+
+                if(s < 1 || o < 1){
+                    requestAnimationFrame(popOpen)
+                }
+            }
+
+            popOpen()
+
+        }, [100])
+    } 
+
+    // close window animation
+    if(state.opened){
+        let opacity = 0
+        let scale = 0
+        let o = 0
+        let s = 0
+
+        let popClosed = () => {
+            scale = 1 - easeOutQuint(s)
+            opacity = 1 - easeOutQuint(o)
+            s += 0.01
+            o += 0.01
+
+            face.style.opacity = opacity
+            face.style.transform = `scale(${scale})`
+            
+
+            if(s < 1 || o < 1){
+                requestAnimationFrame(popClosed)
+            } else {
+                window.removeEventListener('closeChat', popClosed)
+            }
+        }
+
+        window.addEventListener('closeChat', popClosed)
+    }
+
     return face
 }
 
 
-const Form = () => {
+const Form = (config, updater) => {
     let chatForm = document.createElement('div')
     let chatDivider = document.createElement('div')
     let chatInput = document.createElement('input')
@@ -204,6 +378,7 @@ const Form = () => {
         position: 'relative',
         width: '100%',
         flexGrow: 0.08,
+        minHeight: '8%',
     }
 
     let chatDividerStyles = {
@@ -267,6 +442,36 @@ const Form = () => {
     chatForm.append(chatDivider)
     chatForm.append(chatInput)
     chatForm.append(chatSend)
-    
+
+    let sendMessage = () => {
+        if(chatInput.value.length > 0){
+            console.log("sending message")
+
+            // update with user message
+            updater((state) => {
+                return {
+                    ...state,
+                    messages: [...state.messages, { text: chatInput.value, isUserMessage: true }]
+                }
+            })
+
+        }
+    }
+
+    let processInput = (e) => {
+        if (e.key === 'Enter') {
+            sendMessage()
+        }
+    }
+
+    let focusInput = (e) => {
+        chatInput.focus()
+        window.addEventListener('updatedChatComp', focusInput);
+    }
+
+    chatSend.addEventListener("click", sendMessage)
+    chatInput.addEventListener('keyup', processInput);
+    window.addEventListener('updatedChatComp', focusInput);
+        
     return chatForm
 }

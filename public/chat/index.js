@@ -1,7 +1,7 @@
 import ChatComponent from "/chat/ChatComponent.js"
 
 let root = document.body
-let component = null
+let lastComponent = null
 let config = {
     botName: 'Patrick',
     avatar: '/chat/avatar.png'
@@ -18,19 +18,25 @@ let config = {
 const stateManager = () => {
 
     let state = {
-        messages: [{ text: 'Hi there!', isUserMessage: false }, { text: 'How can I help?', isUserMessage: false }],
+        messages: [{ text: 'Hi there!', isUserMessage: false }, { text: 'How can I help?', isUserMessage: false }, { text: 'I dunno', isUserMessage: true }],
+        opened: true
+    }
+
+    let prevState = {
+        messages: [],
         opened: false
     }
 
     let listeners = []
 
     const updater = (updaterFunc) => {
+        prevState = state
         state = updaterFunc(state)
         fireListeners()
     }
 
     const fireListeners = () => {
-        listeners.forEach(listener => listener(state))
+        listeners.forEach(listener => listener(state, prevState, updater))
     }
 
     const registerListeners = (listenerFunc) => {
@@ -45,15 +51,19 @@ const stateManager = () => {
 const init = () => {
     const [state, updater, registerListeners] = stateManager()
 
-    let renderCallBack = (state) => {
-        console.log(state)
-        if(component){ root.removeChild(child) }
-        const chat = ChatComponent(config, state)
-        component = chat
-        root.appendChild(chat)
+    let renderCallBack = (state, prevState, updater) => {
+        if(lastComponent){ 
+            root.removeChild(lastComponent.component)
+            lastComponent.cleanup()
+         }
+        
+        const chat = ChatComponent(config, state, prevState, updater)
+        lastComponent = chat
+        root.appendChild(chat.component)
+        window.dispatchEvent(new CustomEvent('updatedChatComp'))
     }
     
-    registerListeners((newState) => renderCallBack(newState))
+    registerListeners((newState, prevState, updater) => renderCallBack(newState, prevState, updater))
 
     updater((state) => {
         return {
