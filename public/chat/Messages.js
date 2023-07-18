@@ -7,8 +7,9 @@ export const Messages = (state) => {
     let styles = {
         position: 'relative',
         width: '100%',
-        flexGrow: 0.84,
-        maxHeight: '84%',
+        //flexGrow: 0.84,
+        minHeight: '81%',
+        maxHeight: '81%',
         padding: '16px',
         overflow: 'scroll'
     }
@@ -17,11 +18,11 @@ export const Messages = (state) => {
         chatMessages.style[k] = styles[k]
     })
 
-    for (let message of state.messages){
+    for (let message of state.messages){        
         if (message.isUserMessage){
             chatMessages.appendChild(createUserMessage(message))
         } else {
-            chatMessages.appendChild(createBotMessage(state, message).component)
+            chatMessages.appendChild(createBotMessage(message).component)
         }
     }
 
@@ -137,7 +138,8 @@ const createBotMessage = (message = null) => {
         backgroundColor: '#F1F5F9',
         width: '16px',
         height: '16px',
-        zIndex: 1
+        zIndex: 1,
+        opacity: !message ? 0 : 1
     }
 
     let tailStyles = {
@@ -147,7 +149,8 @@ const createBotMessage = (message = null) => {
         backgroundColor: 'rgba(201, 217, 232)',
         width: '16px',
         height: '16px',
-        transform: 'rotate(40deg)'
+        transform: 'rotate(40deg)',
+        opacity: !message ? 0 : 1
     }
 
     let messageStyles = {
@@ -160,7 +163,8 @@ const createBotMessage = (message = null) => {
         wordWrap: 'break-word',
         zIndex: 2,
         width: !message && '40px' || 'auto',
-        height: !message && '36px' || 'auto'
+        height: !message && '36px' || 'auto',
+        opacity: !message ? 0 : 1
     }
 
     let wrapperStyles = {
@@ -196,16 +200,28 @@ const createBotMessage = (message = null) => {
 
     // awaiting bot message and this is the typing bubble
     if (!message){
-        let typing = setInterval(() => {
-            if(botMessage.innerText.length < 4){
-                botMessage.innerText += '.'
-            } else botMessage.innerText = ''
-        }, 250)
+        let botTyping;
+
+        let botDelay = setTimeout(() => {
+
+            botTyping = setInterval(() => {
+                if(botMessage.innerText.length < 4){
+                    botMessage.innerText += '.'
+                } else botMessage.innerText = ''
+            }, 250)
+
+            botMessageTailShaper.style.opacity = 1
+            botMessageTail.style.opacity = 1
+            botMessage.style.opacity = 1
+
+        }, 750)
+        
 
         return {
             component: botMessageWrapper, 
             cleanup: () => {
-                clearInterval(typing)
+                if(botTyping){clearInterval(botTyping)}
+                else clearTimeout(botDelay)
             }
         }
     }

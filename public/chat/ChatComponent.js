@@ -12,7 +12,9 @@ function easeOutQuint(x) {
 }
 
 // markup for rendering the chat component
-export default function ChatComponent(config, state, prevState, updater){
+export default function ChatComponent(config, state, prevState, updater, face){
+
+    console.log('rerenderoing')
     const container = document.createElement('div')
     let cleanups = []
 
@@ -32,14 +34,19 @@ export default function ChatComponent(config, state, prevState, updater){
     })
 
     if (state.opened){
-        console.log("open")
+        //console.log("open")
         let chatWindow = ChatWindow(config, state, prevState, updater)
-        cleanups.push(chatWindow.cleanup)
+        let avatar = Face(config, state, prevState, face)
+
         container.appendChild(chatWindow.component)
-        container.appendChild(Face(config, state, prevState))
+        container.appendChild(avatar.component)
         container.appendChild(Opener(config, state, updater))
+
+        cleanups.push(chatWindow.cleanup)
+        cleanups.push(avatar.cleanup)
+
     } else {
-        console.log("closed")
+        //console.log("closed")
         container.appendChild(Opener(config, state, updater))
     }
 
@@ -80,8 +87,9 @@ const ChatWindow = (config, state, prevState, updater) => {
     }
 
 
-
     // trigger open window animation
+    //console.log(!prevState.opened && state.opened)
+
     if (!prevState.opened && state.opened){
         setTimeout(() => {
             let opacity = 0
@@ -91,6 +99,7 @@ const ChatWindow = (config, state, prevState, updater) => {
 
 
             let popOpen = () => {
+                //console.log("opened fired")
                 scale = easeOutBack(s)
                 opacity = easeOutBack(o)
                 s += 0.01
@@ -128,9 +137,10 @@ const ChatWindow = (config, state, prevState, updater) => {
 
             if(s < 1 || o < 1){
                 requestAnimationFrame(popClosed)
-            } else {
-                window.removeEventListener('closeChat', popClosed)
-                // console.log("updater fired")
+            } 
+            else {
+                //console.log("close window updater")
+                //window.removeEventListener('closeChat', popClosed)
                 updater((state) => {
                     return {
                         ...state,
@@ -140,6 +150,8 @@ const ChatWindow = (config, state, prevState, updater) => {
                 })
             }
         }
+
+        cleanups.push(() => window.removeEventListener('closeChat', popClosed))
 
         window.addEventListener('closeChat', popClosed)
     }
@@ -167,12 +179,15 @@ const Header = (config) => {
     let styles = {
         position: 'relative',
         width: '100%',
-        flexGrow: 0.08,
-        minHeight: '8%',
+        //flexGrow: 0.08,
+        height: '10%',
+        minHeight: '10%',
+        maxHeight: '10%',
         textAlign: 'center',
         display: 'flex',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
         fontWeight: 500,
         fontSize: '15px',
         paddingLeft: '24px',
@@ -192,7 +207,18 @@ const Header = (config) => {
     const header = document.createElement('div')
     const divider = document.createElement('div')
 
-    header.textContent = `Conversation with ${config.botName}`
+    const headerMain = document.createElement('p')
+    headerMain.style.fontWeight = 500
+    headerMain.style.fontSize = '14px'
+    headerMain.style.lineHeight = '20px'
+
+    const headerSub = document.createElement('p')
+    headerSub.style.fontWeight = 400
+    headerSub.style.fontSize = '12px'
+    headerSub.style.lineHeight = '16px'
+
+    headerMain.textContent = `${config.botName} - Chaos Coordinator`
+    headerSub.textContent = `Typically responds sometimes`
 
     Object.keys(styles).forEach(k => {
         header.style[k] = styles[k]
@@ -203,6 +229,8 @@ const Header = (config) => {
     })
 
     header.append(divider)
+    header.append(headerMain)
+    header.append(headerSub)
 
     return header
 }
@@ -248,7 +276,7 @@ const Opener = (config, state, updater) => {
 
     let toggle = () => {
         close.removeEventListener('click', toggle)
-        console.log("TOGGLE STATE", state)
+        //console.log("TOGGLE STATE", state)
         if(state.opened){
             // updater fires in chatWindow after animate out
             window.dispatchEvent(new CustomEvent("closeChat"))
@@ -274,22 +302,29 @@ const Opener = (config, state, updater) => {
 }
 
 
-const Face = (config, state, prevState) => {
-    let face = document.createElement('div')
-    let image = document.createElement('img')
+const Face = (config, state, prevState, face) => {
+    let cleanups = []
+
+    let wrapper = document.createElement('div')
+    let image = face
     image.style.position = "absolute";
     image.style.top = "0";
     image.style.left = "0";
     image.style.width = "100%";
     image.style.height = "100%";
+    image.style.minWidth = "100%";
+    image.style.minHeight = "100%";
     image.style.zIndex = 1;
     image.style.borderRadius = '50%'
+    image.style.objectFit = 'cover'
+    image.style.transition = 'scale 1s ease-out'
+    image.style.transitionDelay = '1s'
 
-    face.appendChild(image);
+    wrapper.appendChild(image);
 
     let styles = {
-        width: '72px',
-        height: '72px',
+        width: '96px',
+        height: '96px',
         position: 'absolute',
         boxShadow: '8px 8px 16px #C9D9E8, -6px -6px 10px #FFFFFF',
         borderRadius: '50%',
@@ -299,14 +334,12 @@ const Face = (config, state, prevState) => {
         opacity: !prevState.opened ? 0 : 1,
         transform: !prevState.opened ? 'scale(0)': 'scale(1)',
         transformOrigin: 'bottom right'
+
     }
 
     Object.keys(styles).forEach(k => {
-        face.style[k] = styles[k]
+        wrapper.style[k] = styles[k]
     })
-
-    image.src = config.avatar
-
 
     // trigger open window animation
     if (!prevState.opened && state.opened){
@@ -323,8 +356,8 @@ const Face = (config, state, prevState) => {
                 s += 0.01
                 o += 0.01
 
-                face.style.opacity = opacity
-                face.style.transform = `scale(${scale})`
+                wrapper.style.opacity = opacity
+                wrapper.style.transform = `scale(${scale})`
 
                 if(s < 1 || o < 1){
                     requestAnimationFrame(popOpen)
@@ -349,21 +382,59 @@ const Face = (config, state, prevState) => {
             s += 0.01
             o += 0.01
 
-            face.style.opacity = opacity
-            face.style.transform = `scale(${scale})`
+            wrapper.style.opacity = opacity
+            wrapper.style.transform = `scale(${scale})`
             
 
             if(s < 1 || o < 1){
                 requestAnimationFrame(popClosed)
-            } else {
-                window.removeEventListener('closeChat', popClosed)
             }
         }
+
+        cleanups.push(() => window.removeEventListener('closeChat', popClosed))
 
         window.addEventListener('closeChat', popClosed)
     }
 
-    return face
+    // bot is talking if last messages were the bot
+    if(state.messages[state.messages.length - 1] && !state.messages[state.messages.length - 1].isUserMessage){
+        try {
+
+            let scale = 0
+            let s = 0
+            let frame;
+    
+            let growFace = () => {
+                scale = easeOutBack(s)
+                s += 0.0025
+                image.style.transform = `scale(${1 + scale})`
+                if(s < 0.1){ frame = requestAnimationFrame(growFace) }
+            }
+
+            let shrinkFace = () => {
+                console.log("shrink")
+                scale = easeOutBack(s)
+                s -= 0.005
+                image.style.transform = `scale(${1 + scale})`
+                if(s > 0){ frame = requestAnimationFrame(shrinkFace) }
+            }
+
+            image.addEventListener("ended", shrinkFace)
+            growFace()
+
+            image.play()
+            cleanups.push(() => image.pause(), () => { cancelAnimationFrame(frame), () => image.removeEventListener("ended", shrinkFace) })
+        } 
+        catch(e){
+            console.log("Error: avatar can't talk")
+        }
+    }
+
+    return {component: wrapper, cleanup: () => {
+        for (let cleanup of cleanups){
+            cleanup()
+        }
+    }}
 }
 
 
@@ -378,7 +449,9 @@ const Form = (config, updater) => {
         position: 'relative',
         width: '100%',
         flexGrow: 0.08,
-        minHeight: '8%',
+        height: '9%',
+        minHeight: '9%',
+        maxHeight: '9%'
     }
 
     let chatDividerStyles = {
@@ -445,7 +518,7 @@ const Form = (config, updater) => {
 
     let sendMessage = () => {
         if(chatInput.value.length > 0){
-            console.log("sending message")
+            console.log("sending message updater")
 
             // update with user message
             updater((state) => {
